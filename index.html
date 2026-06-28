@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel GCM — Potencial por Região</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1f2937;
+      --border: #30363d;
+      --accent: #2563eb;
+      --accent-light: #3b82f6;
+      --accent-glow: rgba(37,99,235,0.18);
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --sidebar-w: 220px;
+      --font-mono: 'JetBrains Mono', 'Fira Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 10;
+    }
+    .logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-mark {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .logo-mark span { color: var(--accent-light); }
+    .logo-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    nav { padding: 16px 0; flex: 1; }
+    .nav-section {
+      padding: 0 12px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--muted);
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 20px;
+      cursor: pointer;
+      color: var(--muted);
+      border-radius: 0;
+      transition: all .15s;
+      border-left: 3px solid transparent;
+      font-size: 13.5px;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active {
+      color: var(--accent-light);
+      background: var(--accent-glow);
+      border-left-color: var(--accent-light);
+    }
+    .nav-icon { font-size: 16px; width: 18px; text-align: center; }
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── MAIN ── */
+    #main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    .topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+    .topbar-meta { font-size: 12px; color: var(--muted); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-blue { background: var(--accent-glow); color: var(--accent-light); border: 1px solid var(--accent); }
+    .badge-green { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+
+    .page { display: none; padding: 28px; animation: fadeIn .2s; }
+    .page.active { display: block; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+    /* ── UPLOAD PAGE ── */
+    .upload-card {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; line-height: 1.5; }
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--accent); }
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: var(--surface);
+      margin-bottom: 16px;
+    }
+    .drop-zone:hover, .drop-zone.dragging {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .drop-icon { font-size: 36px; margin-bottom: 12px; }
+    .drop-text { font-size: 14px; color: var(--muted); }
+    .drop-text strong { color: var(--text); }
+    .drop-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    input[type=file] { display: none; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-light); }
+    .btn-primary:disabled { opacity: .4; cursor: default; }
+    .btn-outline {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent-light); }
+    .upload-log {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+    .log-ok { color: var(--green); }
+    .log-err { color: var(--red); }
+    .log-info { color: var(--accent-light); }
+
+    /* ── PAINEL PAGE ── */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .card-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin-bottom: 8px;
+    }
+    .card-value {
+      font-size: 26px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -1px;
+    }
+    .card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-title { font-size: 14px; font-weight: 700; }
+
+    .search-bar {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+      width: 220px;
+      transition: border-color .15s;
+    }
+    .search-bar:focus { border-color: var(--accent); }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface2);
+      padding: 11px 16px;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th.num { text-align: right; }
+    tbody tr { transition: background .1s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+    td {
+      padding: 13px 16px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    td.num {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+    }
+    .region-name { font-weight: 600; }
+    .gcm-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .gcm-1 { background: rgba(34,197,94,.12); color: var(--green); }
+    .gcm-2 { background: rgba(234,179,8,.12); color: var(--yellow); }
+    .gcm-3plus { background: rgba(37,99,235,.12); color: var(--accent-light); }
+    .gcm-frac { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+    .progress-bar {
+      height: 5px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 5px;
+      min-width: 80px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width .3s;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 42px; margin-bottom: 14px; }
+    .empty-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .empty-text { font-size: 13px; }
+    .empty-cta { margin-top: 20px; }
+
+    .loader {
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 7px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .alert-info { background: var(--accent-glow); border: 1px solid var(--accent); color: var(--accent-light); }
+    .alert-warn { background: rgba(234,179,8,.1); border: 1px solid rgba(234,179,8,.3); color: var(--yellow); }
+    .alert-success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.3); color: var(--green); }
+
+    .meta-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+
+    /* responsive */
+    @media (max-width: 700px) {
+      :root { --sidebar-w: 0px; }
+      #sidebar { display: none; }
+      #main { margin-left: 0; }
+      .config-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar">
+  <div class="logo">
+    <div class="logo-mark">GCM<span>·</span>Panel</div>
+    <div class="logo-sub">Estruturação Comercial</div>
+  </div>
+  <nav>
+    <div class="nav-section">Menu</div>
+    <div class="nav-item active" onclick="showPage('upload')">
+      <span class="nav-icon">📤</span> Upload
+    </div>
+    <div class="nav-item" onclick="showPage('painel')">
+      <span class="nav-icon">📊</span> Painel
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    Meta GCM: R$ 25M/potencial
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main id="main">
+  <div class="topbar">
+    <span class="topbar-title" id="topbar-title">Upload de Planilha</span>
+    <span class="topbar-meta" id="topbar-meta">Configure sua conexão Supabase e envie o arquivo</span>
+  </div>
+
+  <!-- ── UPLOAD PAGE ── -->
+  <div id="page-upload" class="page active">
+    <div class="upload-card">
+      <h2>Importar Planilha de Lojas</h2>
+      <p class="sub">Configure as credenciais do Supabase, selecione o arquivo .xlsx com as lojas e clique em Importar. Os dados serão enviados para o banco de dados automaticamente.</p>
+
+      <div class="alert alert-info">
+        ℹ️ Certifique-se de ter criado a tabela <strong>lojas</strong> no Supabase antes de importar. Consulte o arquivo <code>schema.sql</code> incluso.
+      </div>
+
+      <div class="config-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Supabase URL</label>
+          <input type="text" id="sb-url" placeholder="https://xxxx.supabase.co" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Supabase Anon Key</label>
+          <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+        </div>
+        <div class="field">
+          <label>Meta GCM (R$)</label>
+          <input type="number" id="gcm-meta" value="25000000" />
+        </div>
+        <div class="field">
+          <label>Nome da Tabela</label>
+          <input type="text" id="table-name" value="lojas" />
+        </div>
+      </div>
+
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text"><strong>Clique para selecionar</strong> ou arraste o arquivo aqui</div>
+        <div class="drop-hint">Suporta .xlsx — planilha com colunas REGIAO (Q), VOL_LEVES_PERFIL_CB (AJ), QT_LEVES_CB (AR)</div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(event)" />
+
+      <div id="file-info" style="display:none" class="alert alert-success">
+        ✅ <span id="file-name"></span> — <span id="file-rows"></span> linhas detectadas
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btn-import" onclick="importData()" disabled>
+          ⬆️ Importar para Supabase
+        </button>
+        <button class="btn btn-outline" onclick="showPage('painel')">
+          📊 Ver Painel
+        </button>
+      </div>
+
+      <div id="upload-log" class="upload-log" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ── PAINEL PAGE ── -->
+  <div id="page-painel" class="page">
+    <div class="meta-row">
+      <span id="status-badge" class="badge badge-blue">⏳ Carregando...</span>
+    </div>
+
+    <div class="summary-cards" id="summary-cards">
+      <div class="card">
+        <div class="card-label">Total de Lojas</div>
+        <div class="card-value" id="s-lojas">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Volume CB Total</div>
+        <div class="card-value" id="s-vol">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Contratos CB Total</div>
+        <div class="card-value" id="s-qt">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">GCMs Necessários</div>
+        <div class="card-value" id="s-gcm">—</div>
+        <div class="card-sub" id="s-gcm-sub">Meta: R$ 25M / GCM</div>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <span class="section-title">🗺️ Agrupamento por Região</span>
+      <input class="search-bar" type="text" placeholder="🔍 Filtrar região..." oninput="filterTable(this.value)" />
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Região</th>
+            <th class="num">Lojas</th>
+            <th class="num">Volume CB (R$)</th>
+            <th class="num">% do Total</th>
+            <th class="num">Contratos CB</th>
+            <th class="num">GCMs</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="6">
+            <div class="loader"><div class="spinner"></div>Aguardando dados...</div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── CONFIG ──
+const GCM_META_DEFAULT = 25_000_000;
+let supabaseClient = null;
+let allRows = [];
+let parsedData = null;
+
+// ── SUPABASE INIT ──
+function getClient() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) return null;
+  return supabase.createClient(url, key);
+}
+
+// ── NAVIGATION ──
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item')[name === 'upload' ? 0 : 1].classList.add('active');
+
+  const titles = {
+    upload: ['Upload de Planilha', 'Configure sua conexão Supabase e envie o arquivo'],
+    painel: ['Painel por Região', 'Agrupamento de lojas e cálculo de GCMs']
+  };
+  document.getElementById('topbar-title').textContent = titles[name][0];
+  document.getElementById('topbar-meta').textContent = titles[name][1];
+
+  if (name === 'painel') loadPainel();
+}
+
+// ── DRAG & DROP ──
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragging'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragging'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('dragging');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+function handleFile(e) { processFile(e.target.files[0]); }
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, { defval: null });
+    parsedData = data;
+
+    document.getElementById('file-info').style.display = 'flex';
+    document.getElementById('file-name').textContent = file.name;
+    document.getElementById('file-rows').textContent = data.length;
+    document.getElementById('drop-zone').style.borderColor = 'var(--green)';
+    document.getElementById('btn-import').disabled = false;
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── IMPORT ──
+async function importData() {
+  if (!parsedData) return;
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  const tableName = document.getElementById('table-name').value.trim() || 'lojas';
+
+  if (!url || !key) { logMsg('err', '❌ Configure a URL e Key do Supabase primeiro.'); return; }
+
+  const client = supabase.createClient(url, key);
+  const log = document.getElementById('upload-log');
+  log.style.display = 'block';
+  log.innerHTML = '';
+
+  const btn = document.getElementById('btn-import');
+  btn.disabled = true;
+  btn.textContent = '⏳ Enviando...';
+
+  // Map columns
+  const rows = parsedData.map(r => ({
+    cnpj_loja: String(r.CNPJ_LOJA || ''),
+    razao_loja: r.RAZAO_LOJA || null,
+    nome_fantasia: r.NOME_FANTASIA || null,
+    cidade: r.CIDADE || null,
+    uf: r.UF || null,
+    regiao: r.REGIAO || null,
+    divisao: r.DIVISAO || null,
+    regional: r.REGIONAL || null,
+    status_loja: r.STATUS_LOJA || null,
+    vol_leves_perfil_cb: Number(r.VOL_LEVES_PERFIL_CB) || 0,
+    qt_leves_cb: Number(r.QT_LEVES_CB) || 0,
+  }));
+
+  logMsg('info', `📋 ${rows.length} lojas mapeadas. Enviando em lotes...`);
+
+  const BATCH = 200;
+  let sent = 0;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const { error } = await client.from(tableName).upsert(batch, { onConflict: 'cnpj_loja' });
+    if (error) {
+      logMsg('err', `❌ Lote ${Math.floor(i/BATCH)+1} erro: ${error.message}`);
+    } else {
+      sent += batch.length;
+      logMsg('ok', `✅ Lote ${Math.floor(i/BATCH)+1} — ${sent}/${rows.length} lojas`);
+    }
+  }
+
+  logMsg('ok', `🎉 Importação concluída! ${sent} registros no Supabase.`);
+  btn.textContent = '✅ Importado';
+  btn.disabled = false;
+}
+
+function logMsg(type, msg) {
+  const log = document.getElementById('upload-log');
+  const span = document.createElement('div');
+  span.className = `log-${type}`;
+  span.textContent = `[${new Date().toLocaleTimeString('pt-BR')}] ${msg}`;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── PAINEL ──
+let regionData = [];
+let maxVol = 0;
+
+async function loadPainel() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+
+  if (!url || !key) {
+    renderEmpty('Configure o Supabase na tela de Upload', 'Preencha a URL e Key do Supabase e importe sua planilha.');
+    return;
+  }
+
+  setStatus('loading');
+  const client = supabase.createClient(url, key);
+  const tableName = document.getElementById('table-name').value.trim() || 'lojas';
+
+  const { data, error } = await client
+    .from(tableName)
+    .select('regiao, vol_leves_perfil_cb, qt_leves_cb');
+
+  if (error) {
+    setStatus('error', error.message);
+    renderEmpty('Erro ao carregar dados', error.message);
+    return;
+  }
+  if (!data || data.length === 0) {
+    setStatus('empty');
+    renderEmpty('Nenhuma loja encontrada', 'Faça o upload da planilha primeiro.');
+    return;
+  }
+
+  allRows = data;
+  processAndRender(data);
+  setStatus('ok', data.length);
+}
+
+function processAndRender(data) {
+  const meta = Number(document.getElementById('gcm-meta').value) || GCM_META_DEFAULT;
+  const map = {};
+
+  data.forEach(r => {
+    const reg = r.regiao || 'Sem Região';
+    if (!map[reg]) map[reg] = { regiao: reg, lojas: 0, vol: 0, qt: 0 };
+    map[reg].lojas++;
+    map[reg].vol += Number(r.vol_leves_perfil_cb) || 0;
+    map[reg].qt += Number(r.qt_leves_cb) || 0;
+  });
+
+  regionData = Object.values(map).sort((a, b) => b.vol - a.vol);
+  maxVol = Math.max(...regionData.map(r => r.vol));
+
+  const totVol = regionData.reduce((s, r) => s + r.vol, 0);
+  const totQt = regionData.reduce((s, r) => s + r.qt, 0);
+  const totLojas = regionData.reduce((s, r) => s + r.lojas, 0);
+  const totGcm = regionData.reduce((s, r) => s + Math.ceil(r.vol / meta), 0);
+
+  document.getElementById('s-lojas').textContent = totLojas.toLocaleString('pt-BR');
+  document.getElementById('s-vol').textContent = fmtBRL(totVol);
+  document.getElementById('s-qt').textContent = totQt.toLocaleString('pt-BR');
+  document.getElementById('s-gcm').textContent = totGcm;
+  document.getElementById('s-gcm-sub').textContent = `Meta: ${fmtBRL(meta)} / GCM`;
+
+  renderTable(regionData, meta, totVol);
+}
+
+function renderTable(data, meta, totVol) {
+  meta = meta || Number(document.getElementById('gcm-meta').value) || GCM_META_DEFAULT;
+  totVol = totVol || data.reduce((s, r) => s + r.vol, 0);
+
+  const tbody = document.getElementById('table-body');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nenhuma região encontrada</div></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(r => {
+    const gcmFull = r.vol / meta;
+    const gcmInt = Math.ceil(gcmFull);
+    const pct = totVol > 0 ? (r.vol / totVol * 100) : 0;
+    const barPct = maxVol > 0 ? Math.round(r.vol / maxVol * 100) : 0;
+    const pillClass = gcmInt === 1 ? 'gcm-1' : gcmInt === 2 ? 'gcm-2' : 'gcm-3plus';
+
+    return `<tr>
+      <td class="region-name">${r.regiao}</td>
+      <td class="num">${r.lojas.toLocaleString('pt-BR')}</td>
+      <td class="num">
+        ${fmtBRL(r.vol)}
+        <div class="progress-bar"><div class="progress-fill" style="width:${barPct}%"></div></div>
+      </td>
+      <td class="num">${pct.toFixed(1)}%</td>
+      <td class="num">${r.qt.toLocaleString('pt-BR')}</td>
+      <td class="num">
+        <span class="gcm-pill ${pillClass}">${gcmInt}</span>
+        <span class="gcm-frac">${gcmFull.toFixed(2)}</span>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterTable(q) {
+  const meta = Number(document.getElementById('gcm-meta').value) || GCM_META_DEFAULT;
+  const totVol = regionData.reduce((s, r) => s + r.vol, 0);
+  const filtered = q
+    ? regionData.filter(r => r.regiao.toLowerCase().includes(q.toLowerCase()))
+    : regionData;
+  renderTable(filtered, meta, totVol);
+}
+
+function setStatus(type, extra) {
+  const b = document.getElementById('status-badge');
+  if (type === 'loading') { b.className = 'badge badge-blue'; b.textContent = '⏳ Carregando...'; }
+  else if (type === 'ok') { b.className = 'badge badge-green'; b.textContent = `✅ ${extra} lojas carregadas`; }
+  else if (type === 'error') { b.className = 'badge'; b.style.background='rgba(239,68,68,.12)'; b.style.color='#ef4444'; b.textContent = `❌ Erro: ${extra}`; }
+  else if (type === 'empty') { b.className = 'badge badge-blue'; b.textContent = '📭 Sem dados'; }
+}
+
+function renderEmpty(title, text) {
+  document.getElementById('table-body').innerHTML = `
+    <tr><td colspan="6">
+      <div class="empty-state">
+        <div class="empty-icon">🏪</div>
+        <div class="empty-title">${title}</div>
+        <div class="empty-text">${text}</div>
+        <div class="empty-cta"><button class="btn btn-primary" onclick="showPage('upload')">📤 Ir para Upload</button></div>
+      </div>
+    </td></tr>`;
+}
+
+function fmtBRL(v) {
+  if (v >= 1_000_000) return 'R$ ' + (v / 1_000_000).toFixed(1) + 'M';
+  if (v >= 1_000) return 'R$ ' + (v / 1_000).toFixed(0) + 'K';
+  return 'R$ ' + v.toFixed(0);
+}
+
+// Load credentials from localStorage if saved
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('gcm-config');
+  if (saved) {
+    const c = JSON.parse(saved);
+    if (c.url) document.getElementById('sb-url').value = c.url;
+    if (c.key) document.getElementById('sb-key').value = c.key;
+  }
+});
+['sb-url','sb-key'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    localStorage.setItem('gcm-config', JSON.stringify({
+      url: document.getElementById('sb-url').value,
+      key: document.getElementById('sb-key').value,
+    }));
+  });
+});
+</script>
+</body>
+</html>
